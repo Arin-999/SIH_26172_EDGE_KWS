@@ -1,0 +1,36 @@
+# ESP-IDF SDK configuration defaults for KWS Edge node
+# Applied before menuconfig; override per-device as needed.
+
+# ── CPU ──────────────────────────────────────────────────────────────────────
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# ── PSRAM ────────────────────────────────────────────────────────────────────
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_USE_MALLOC=y
+
+# ── Flash ────────────────────────────────────────────────────────────────────
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+
+# ── WiFi ─────────────────────────────────────────────────────────────────────
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=y
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=y
+
+# ── I2S / Audio ───────────────────────────────────────────────────────────────
+CONFIG_I2S_SUPPRESS_DEPRECATE_WARN=y
+
+# ── TFLite / ML ──────────────────────────────────────────────────────────────
+# PSRAM must be enabled for TFLite arena allocation (>200 KB)
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+
+# ── FreeRTOS ─────────────────────────────────────────────────────────────────
+CONFIG_FREERTOS_HZ=1000
+CONFIG_FREERTOS_TASK_FUNCTION_WRAPPER=n
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_COLORS=y
