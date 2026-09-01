@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+*.log
+
+# ML artifacts
+ml/datasets/raw/*
+!ml/datasets/raw/.gitkeep
+ml/datasets/processed/*
+!ml/datasets/processed/.gitkeep
+ml/models/checkpoints/*
+!ml/models/checkpoints/.gitkeep
+ml/models/fp32/*
+!ml/models/fp32/.gitkeep
+ml/models/int8/*
+!ml/models/int8/.gitkeep
+ml/models/exported/*
+!ml/models/exported/.gitkeep
+*.h5
+*.keras
+
+# ESP-IDF
+firmware/esp32/build/
+firmware/esp32/sdkconfig
+firmware/esp32/.cache/
+firmware/esp32/dependencies.lock
+firmware/esp32/managed_components/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Docker
+cloud-asr/.cache/

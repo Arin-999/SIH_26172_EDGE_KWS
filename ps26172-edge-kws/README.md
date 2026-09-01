@@ -1,807 +1,163 @@
-# Development Workflow
+# ps26172-edge-kws
 
-## Team Roles
+**SIH 2026 · Problem Statement 26172 — Edge Keyword Spotting System**
 
-### Member 1 — System Design + AI/ML
+A low-power, privacy-preserving voice command system for edge deployment on ESP32-S3. Detects a user-defined wake word entirely on-device using an INT8-quantized DS-CNN model, then streams the captured command over WiFi to a cloud ASR + intent server.
 
-**Primary responsibility:** System architecture, KWS/AI pipeline, ML research, model development, optimization, and ML validation.
-
-Owns:
-
-```text
-docs/
-├── system-architecture.md
-├── user-flow.md
-├── requirements.md
-├── design-decisions.md
-└── testing-plan.md
-
-ml/
-├── datasets/
-├── preprocessing/
-├── augmentation/
-├── training/
-├── evaluation/
-├── quantization/
-├── personalization/
-├── models/
-└── benchmarks/
 ```
-
-Responsibilities:
-
-* Define complete system architecture.
-* Define interfaces between edge, communication and server.
-* Define audio and ML requirements.
-* Design the KWS pipeline.
-* Build and validate the dataset pipeline.
-* Implement preprocessing and feature extraction.
-* Train baseline KWS models.
-* Optimize the KWS model for edge deployment.
-* Implement INT8 quantization.
-* Implement custom wake-word personalization.
-* Evaluate FAR, FRR, accuracy and latency.
-* Measure model size and RAM requirements.
-* Prepare the model for ESP32 deployment.
-* Define ML-related test cases.
-* Maintain ML experiment records and research documentation.
-
----
-
-### Member 2 — Full Software / Systems Engineer
-
-**Primary responsibility:** Firmware, communication, server, integration, testing infrastructure and software deployment.
-
-Owns:
-
-```text
-firmware/
-server/
-protocol/
-tests/
-scripts/
-examples/
-```
-
-Responsibilities:
-
-* Develop ESP32-S3 firmware.
-* Integrate microphone and audio acquisition.
-* Implement DMA/audio buffering.
-* Implement edge state machine.
-* Integrate the KWS model provided by the ML member.
-* Implement compression.
-* Implement packetization.
-* Implement FEC.
-* Implement authentication and encryption.
-* Implement wireless communication.
-* Develop server receiver.
-* Implement packet reassembly.
-* Integrate ASR.
-* Integrate AI/agent services.
-* Implement optional TTS.
-* Build end-to-end testing.
-* Maintain build and deployment scripts.
-* Maintain CI/testing workflow.
-
----
-
-# Development Principle
-
-Both members work **in parallel**.
-
-Do not wait for the entire project to be completed by one person.
-
-The project is divided into interfaces:
-
-```text
-                    SYSTEM
-                      │
-          ┌───────────┴───────────┐
-          │                       │
-          ▼                       ▼
-       AI / ML                SOFTWARE
-          │                       │
-          │                       │
-          └──────────┬────────────┘
-                     │
-                  INTERFACE
-                     │
-                     ▼
-                INTEGRATED
-                 PROTOTYPE
-```
-
-The AI/ML member develops the intelligence.
-
-The Software member develops the system that runs and communicates with that intelligence.
-
----
-
-# Shared System Architecture
-
-The final system should follow:
-
-```text
-                         USER
-                           │
-                           ▼
-                      MICROPHONE
-                           │
-                           ▼
-                 ┌──────────────────┐
-                 │ Audio Acquisition│
-                 └────────┬─────────┘
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │ Preprocessing    │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │ Acoustic Gate     │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │ Tiny KWS Model   │
-                 │    [AI/ML]       │
-                 └────────┬─────────┘
-                          │
-                   Wake detected
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │ Personalization  │
-                 │    [AI/ML]       │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │ Voice Capture    │
-                 │    [Software]    │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │ Compression      │
-                 │    [Software]    │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │ Packet + FEC     │
-                 │    [Software]    │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │ Encryption       │
-                 │    [Software]    │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                       NETWORK
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │ Server Receiver  │
-                 │    [Software]    │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │       ASR        │
-                 │    [Software]    │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │ AI / Agent       │
-                 │    [Software]    │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                       RESPONSE
+ESP32-S3 (INMP441 mic)
+  └─ MFCC → DS-CNN (INT8 TFLite, ~50 ms) → cosine debounce
+       └─ WAKE ─► stream PCM over WebSocket (HMAC-auth)
+                     └─ faster-whisper ASR → intent handler → response
 ```
 
 ---
 
-# Interface Contract Between Both Members
+## Quick Start
 
-The most important rule is:
+### 1 — Install Python dependencies
 
-> **AI/ML and Software must communicate through clearly defined interfaces.**
+```bash
+pip install -r requirements.txt
+```
 
-Do not directly depend on each other's internal implementation.
+> **Python 3.10+ required.** TensorFlow is needed only for enrollment and training; it is not required to run the server.
+
+### 2 — Start the ASR server
+
+```bash
+uvicorn server.receiver.main:app --host 0.0.0.0 --port 8765
+```
+
+The server loads `faster-whisper base.en` on startup (downloads ~150 MB on first run).
+
+### 3 — Run the firmware simulator
+
+No ESP32 hardware required — the simulator runs the full firmware loop on your PC:
+
+```bash
+# Simulate with a WAV file
+python firmware/esp32/main/simulator.py --audio examples/demo/demo.wav
+
+# Simulate with 3 s of noise (no audio file)
+python firmware/esp32/main/simulator.py
+```
+
+### 4 — Enroll a custom wake word (optional)
+
+```bash
+# Record 5+ utterances of your wake word as WAV files, then:
+python -m ml.personalization.enrollment \
+    utt1.wav utt2.wav utt3.wav utt4.wav utt5.wav \
+    --name my_keyword \
+    --model ml/models/int8/model.tflite
+```
+
+The prototype is saved to `ml/personalization/profiles/my_keyword.npy`.
 
 ---
 
-## Interface 1 — Audio Input
+## Repository Layout
 
-Software provides audio to ML in:
-
-```text
-Format:
-PCM
-
-Sample rate:
-16,000 Hz
-
-Channels:
-1
-
-Sample format:
-16-bit signed integer
+```
+ps26172-edge-kws/
+├── firmware/esp32/         ESP32-S3 firmware (C++ stubs + Python simulator)
+├── hardware/               Wiring diagram, GPIO table, BOM, power budget
+├── ml/                     DS-CNN training, MFCC preprocessing, enrollment, evaluation
+├── server/                 FastAPI WebSocket server (ASR + intent)
+├── protocol/               Binary packet spec, JSON message types, error codes
+├── tests/                  68-test suite (unit, integration, security, network)
+├── scripts/                Dataset, training, conversion, flashing utilities
+├── examples/               Usage examples and demo scripts
+├── docs/                   Requirements, security design, testing plan
+├── INFRASTRUCTURE.md       Full architecture + module reference (start here)
+├── requirements.txt        All Python dependencies
+└── pytest.ini              Test configuration
 ```
 
-Conceptually:
-
-```text
-Software
-   │
-   │ PCM audio frames
-   ▼
-ML/KWS
-```
-
-The ML member must document the exact frame size, hop size and preprocessing requirements.
+> **Detailed documentation:** See [INFRASTRUCTURE.md](INFRASTRUCTURE.md) for the complete module reference, data-flow diagrams, protocol specification, and environment configuration.
 
 ---
 
-# Interface 2 — KWS Output
+## Running Tests
 
-The ML system should expose a simple interface:
+```bash
+# All software tests (no hardware or model artifacts required)
+python -m pytest tests/ -v -m "not hardware and not model"
 
-```text
-KWS(audio_frame)
-        ↓
-{
-    keyword_probability,
-    class,
-    timestamp
-}
+# With coverage report
+python -m pytest tests/ --cov=ml --cov=server --cov-report=term-missing \
+    -m "not hardware and not model"
 ```
 
-Example:
+Current status: **68/68 passed**.
 
-```text
-{
-    "class": "keyword",
-    "probability": 0.94,
-    "timestamp": 12840
-}
-```
-
-The Software member should not need to know the internal neural-network architecture.
+| Category | Tests |
+|---|---|
+| Unit — audio preprocessing | 16 |
+| Unit — MFCC feature extraction | 12 |
+| Unit — cosine matcher + debounce | 13 |
+| Integration — enrollment → EER pipeline | 4 |
+| Network — assembler + gap detector | 14 |
+| Security — HMAC token auth | 9 |
 
 ---
 
-# Interface 3 — Personalization
+## Server Configuration
 
-ML exposes:
+All options are read from environment variables:
 
-```text
-enroll_keyword(audio_samples)
-```
+| Variable | Default | Description |
+|---|---|---|
+| `KWS_SECRET` | `dev-secret-do-not-use-in-production` | HMAC shared secret — **change in production** |
+| `KWS_ASR_MODEL` | `base.en` | faster-whisper model (`tiny`, `base`, `small`, `medium`) |
+| `KWS_ASR_DEVICE` | `cpu` | `cpu` or `cuda` |
+| `KWS_MAX_SESSIONS` | `10` | Max concurrent WebSocket sessions |
+| `KWS_AUTH_WINDOW_S` | `30` | Token timestamp validity window (seconds) |
 
-and:
-
-```text
-verify_keyword(audio_samples)
-```
-
-Conceptually:
-
-```text
-User
- ↓
-Software enrollment interface
- ↓
-ML personalization module
- ↓
-Keyword profile
-```
-
-Runtime:
-
-```text
-Audio
- ↓
-KWS
- ↓
-Personalization
- ↓
-WAKE / IGNORE
-```
-
----
-
-# Interface 4 — Model Artifact
-
-The ML member provides:
-
-```text
-model.tflite
-```
-
-along with:
-
-```text
-model_metadata.json
-```
-
-The metadata should specify:
-
-```text
-model version
-input shape
-input datatype
-output shape
-output datatype
-sample rate
-feature parameters
-quantization parameters
-class labels
-expected preprocessing
-```
-
-Example:
-
-```text
-models/
-└── kws_v1/
-    ├── model.tflite
-    └── model_metadata.json
-```
-
-The Software member integrates this artifact into the ESP32 firmware.
-
----
-
-# Interface 5 — Packet Protocol
-
-The Software member owns the communication protocol.
-
-The protocol must be documented before integration.
-
-Example:
-
-```text
-Packet
-├── version
-├── session_id
-├── sequence_number
-├── timestamp
-├── flags
-├── payload_length
-├── payload
-└── authentication_tag
-```
-
-Documentation:
-
-```text
-protocol/
-└── packet-format.md
-```
-
-The ML member does not need to implement the transport layer.
-
----
-
-# Interface 6 — Server API
-
-The Software member owns the server interface.
-
-Example:
-
-```text
-ESP32
-  ↓
-Secure packet stream
-  ↓
-Server
-  ↓
-Audio
-  ↓
-ASR
-  ↓
-Text
-  ↓
-AI Agent
-  ↓
-Response
-```
-
-The exact API/protocol should be documented in:
-
-```text
-docs/protocol-specification.md
+```bash
+# Production example
+export KWS_SECRET="$(openssl rand -hex 32)"
+export KWS_ASR_MODEL="small.en"
+export KWS_ASR_DEVICE="cuda"
+uvicorn server.receiver.main:app --host 0.0.0.0 --port 8765 --workers 1
 ```
 
 ---
 
-# Git Branch Ownership
+## Hardware
 
-Use:
+**Target:** ESP32-S3-DevKitC-1 + INMP441 MEMS I2S microphone
 
-```text
-main
-│
-└── develop
-     │
-     ├── feature/ml-kws
-     ├── feature/ml-personalization
-     ├── feature/esp32
-     ├── feature/audio-pipeline
-     ├── feature/network
-     ├── feature/server
-     └── feature/integration
+| Signal | GPIO |
+|---|---|
+| I2S Data (SD) | GPIO 4 |
+| Word Select (WS) | GPIO 5 |
+| Bit Clock (SCK) | GPIO 6 |
+
+Flash the firmware:
+
+```bash
+idf.py -p COM3 flash monitor          # Windows
+idf.py -p /dev/ttyACM0 flash monitor  # Linux / macOS
 ```
 
-### AI/ML member
-
-Primarily works on:
-
-```text
-feature/ml-kws
-feature/ml-personalization
-```
-
-### Software member
-
-Primarily works on:
-
-```text
-feature/esp32
-feature/audio-pipeline
-feature/network
-feature/server
-```
-
-Integration work uses:
-
-```text
-feature/integration
-```
+See [hardware/README.md](hardware/README.md) for full wiring, power budget, and BOM.
 
 ---
 
-# GitHub Working Rules
+## ML Pipeline Overview
 
-## Rule 1 — Never directly work on `main`
-
-Use:
-
-```text
-feature branch
-      ↓
-Pull Request
-      ↓
-Review
-      ↓
-develop
-      ↓
-Integration
-      ↓
-main
 ```
+WAV file → load_audio → resample (16 kHz) → normalize → trim/pad (1 s)
+         → MFCC (49 × 40 × 1) → DS-CNN TFLite INT8 → 64-D embedding
+         → cosine similarity → 2-of-3 debounce → WAKE
+```
+
+Training, quantization, and evaluation scripts live in `ml/`. See [INFRASTRUCTURE.md §5](INFRASTRUCTURE.md) for the full pipeline reference.
 
 ---
 
-## Rule 2 — One task = one branch
+## License
 
-Example:
-
-```text
-feature/log-mel-extraction
-```
-
-not:
-
-```text
-feature/all-ml-work
-```
-
-Keep branches focused.
-
----
-
-## Rule 3 — Commit meaningful changes
-
-Good:
-
-```text
-Add log-Mel feature extraction
-Implement KWS baseline
-Add INT8 model export
-Add ESP32 microphone driver
-Implement packet reassembly
-Add FEC decoder
-```
-
-Bad:
-
-```text
-update
-changes
-final
-test
-new
-```
-
----
-
-# Integration Strategy
-
-The project should be integrated in layers.
-
-## Integration 1 — Audio
-
-```text
-Microphone
-    ↓
-ESP32
-    ↓
-PCM
-    ↓
-PC/Python
-```
-
-Goal:
-
-> Verify that the audio captured by ESP32 matches the ML pipeline assumptions.
-
----
-
-## Integration 2 — KWS
-
-```text
-ESP32 microphone
-      ↓
-Preprocessing
-      ↓
-KWS model
-      ↓
-Wake / Ignore
-```
-
-Goal:
-
-> Run the trained model on real microphone input.
-
----
-
-## Integration 3 — Personalization
-
-```text
-User
- ↓
-Keyword enrollment
- ↓
-Personalized profile
- ↓
-ESP32 KWS
- ↓
-Wake / Ignore
-```
-
-Goal:
-
-> Verify that a new user can configure and use a custom wake word.
-
----
-
-## Integration 4 — Capture
-
-```text
-Wake word
-    ↓
-Pre-roll buffer
-    ↓
-Command capture
-    ↓
-Audio packet
-```
-
-Goal:
-
-> Ensure the command is captured without losing its beginning.
-
----
-
-## Integration 5 — Communication
-
-```text
-ESP32
- ↓
-Compression
- ↓
-Packetization
- ↓
-FEC
- ↓
-Encryption
- ↓
-Network
- ↓
-Server
-```
-
-Goal:
-
-> Verify reliable and secure transmission.
-
----
-
-## Integration 6 — ASR
-
-```text
-ESP32
- ↓
-Server
- ↓
-Audio reconstruction
- ↓
-ASR
- ↓
-Text
-```
-
-Goal:
-
-> Verify speech reaches ASR correctly.
-
----
-
-## Integration 7 — Complete System
-
-```text
-USER
- ↓
-CUSTOM WAKE WORD
- ↓
-LOCAL KWS
- ↓
-PERSONALIZATION
- ↓
-COMMAND
- ↓
-SECURE TRANSMISSION
- ↓
-ASR
- ↓
-AI AGENT
- ↓
-RESPONSE
-```
-
-This is the final prototype.
-
----
-
-# Definition of Final Prototype
-
-The project is considered complete only when the following flow works repeatedly:
-
-```text
-1. User configures a custom wake word
-                ↓
-2. Device enters low-power listening
-                ↓
-3. User speaks the wake word
-                ↓
-4. Local KWS detects it
-                ↓
-5. Personalization verifies it
-                ↓
-6. Device captures the command
-                ↓
-7. Audio is compressed
-                ↓
-8. Audio is packetized
-                ↓
-9. FEC is applied
-                ↓
-10. Audio is authenticated/encrypted
-                ↓
-11. Audio is transmitted
-                ↓
-12. Server reconstructs audio
-                ↓
-13. ASR converts speech to text
-                ↓
-14. AI agent processes the request
-                ↓
-15. Response is generated
-                ↓
-16. User receives response
-                ↓
-17. Device returns to listening
-```
-
----
-
-# Shared Definition of Done
-
-A feature is **not complete** until:
-
-```text
-[ ] Code implemented
-[ ] Unit test written
-[ ] Test passed
-[ ] Documentation updated
-[ ] Interface documented
-[ ] Git commit created
-[ ] Pull request created
-[ ] Code reviewed
-[ ] Integrated with develop
-```
-
-For ML:
-
-```text
-[ ] Dataset validated
-[ ] Training reproducible
-[ ] Evaluation completed
-[ ] FAR measured
-[ ] FRR measured
-[ ] Model size measured
-[ ] RAM measured
-[ ] Latency measured
-[ ] INT8 model validated
-[ ] ESP32 inference tested
-```
-
-For Software:
-
-```text
-[ ] Firmware builds
-[ ] Microphone works
-[ ] Buffering works
-[ ] Packetization works
-[ ] FEC works
-[ ] Encryption works
-[ ] Network works
-[ ] Server receives packets
-[ ] Audio reconstructed
-[ ] ASR works
-[ ] End-to-end integration works
-```
-
----
-
-# Final Principle
-
-The two members should think of the project as:
-
-```text
-             AI / ML
-                │
-                │ defined interface
-                ▼
-          EDGE SOFTWARE
-                │
-                │ defined protocol
-                ▼
-          COMMUNICATION
-                │
-                ▼
-             SERVER
-                │
-                ▼
-              ASR
-                │
-                ▼
-             AI AGENT
-```
-
-**AI/ML owns the intelligence.**
-
-**Software owns the execution, communication and integration.**
-
-**Both members jointly own the interfaces and final prototype.**
-
-Never wait for the other member to finish the entire subsystem. Build with **mock inputs, test interfaces early, integrate frequently, and replace mocks with the real implementation as each subsystem becomes ready.**
+See [LICENSE](LICENSE).
