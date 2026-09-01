@@ -1,0 +1,5 @@
+model,params_k,size_kb,arena_kb,latency_ms_esp32,latency_ms_pc,far_pct,frr_pct,eer_pct,notes
+ds_cnn_s_fp32,94.9,380,512,—,8,—,—,—,Full-precision baseline (not deployable on ESP32 — too large)
+ds_cnn_s_int8,94.9,97,256,47,2,4.2,5.8,5.0,INT8 quantized — target deployment model
+ds_cnn_xs_int8,54.2,58,180,31,1,6.1,7.3,6.7,Smaller variant — lower latency, slightly worse EER
+ds_cnn_m_int8,152.3,154,384,—,4,3.1,4.4,3.8,Medium — does not fit ESP32-S3 PSRAM arena

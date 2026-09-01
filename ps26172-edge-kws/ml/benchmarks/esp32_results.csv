@@ -1,0 +1,5 @@
+run,board,cpu_mhz,psram_mhz,mfcc_ms,inference_ms,total_ms,model,notes
+1,ESP32-S3-DevKitC-1,240,80,18.3,43.7,62.0,ds_cnn_s_int8,PSRAM arena 256 KB
+2,ESP32-S3-DevKitC-1,240,80,18.1,44.2,62.3,ds_cnn_s_int8,Second run — reproducible
+3,ESP32-S3-DevKitC-1,240,80,18.4,43.9,62.3,ds_cnn_s_int8,Third run
+4,ESP32-S3-DevKitC-1,240,80,17.9,31.2,49.1,ds_cnn_xs_int8,Smaller model

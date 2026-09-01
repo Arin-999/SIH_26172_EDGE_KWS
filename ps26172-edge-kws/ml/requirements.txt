@@ -1,0 +1,12 @@
+# ML training and evaluation dependencies
+tensorflow>=2.15.0,<2.17
+tensorflow-model-optimization>=0.7.5
+numpy>=1.24,<2.0
+librosa>=0.10.0
+soundfile>=0.12.1
+audiomentations>=0.30.0
+scikit-learn>=1.3.0
+scipy>=1.11.0
+tqdm>=4.66.0
+matplotlib>=3.7.0
+pyyaml>=6.0
