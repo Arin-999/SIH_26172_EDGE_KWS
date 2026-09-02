@@ -1,163 +1,107 @@
-# ps26172-edge-kws
+<div align="center">
+  
+# 🎙️ PS26172 Edge KWS Architecture
 
 **SIH 2026 · Problem Statement 26172 — Edge Keyword Spotting System**
 
-A low-power, privacy-preserving voice command system for edge deployment on ESP32-S3. Detects a user-defined wake word entirely on-device using an INT8-quantized DS-CNN model, then streams the captured command over WiFi to a cloud ASR + intent server.
+*An ultra-lightweight, hybrid edge-cloud voice command system.*
 
-```
-ESP32-S3 (INMP441 mic)
-  └─ MFCC → DS-CNN (INT8 TFLite, ~50 ms) → cosine debounce
-       └─ WAKE ─► stream PCM over WebSocket (HMAC-auth)
-                     └─ faster-whisper ASR → intent handler → response
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Hardware](https://img.shields.io/badge/Hardware-ESP32--S3-orange.svg)](https://www.espressif.com/)
+[![Framework](https://img.shields.io/badge/ML-TensorFlow_Lite-orange.svg)](https://www.tensorflow.org/lite/microcontrollers)
+[![Server](https://img.shields.io/badge/Server-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
+
+</div>
+
+---
+
+## 📖 Overview
+
+As voice-controlled IoT proliferates, processing everything in the cloud is too costly, privacy-invasive, and slow. 
+
+This repository provides a **hybrid architecture** solution:
+1. **The Edge (<256KB RAM):** An ESP32-S3 continuously listens for a custom wake word using an INT8-quantized Depthwise-Separable CNN (DS-CNN).
+2. **The Cloud (Heavy Lifting):** Upon detecting the keyword, the ESP32 instantly streams the subsequent audio over WebSockets to a FastAPI server running `faster-whisper` for Automatic Speech Recognition (ASR).
+
+---
+
+## 🏗️ Project Architecture
+
+```mermaid
+graph LR
+    subgraph Edge [Edge Device - ESP32-S3]
+        Mic[INMP441 Mic] -->|I2S| TFLite[TFLite Micro DS-CNN]
+        TFLite -->|Wake Word Detected| WS_Client[WebSocket Client]
+    end
+
+    subgraph Server [Local/Cloud Server]
+        WS_Server[FastAPI WS] --> Whisper[Faster-Whisper ASR]
+        Whisper --> Intent[Intent Handler]
+    end
+
+    WS_Client -.->|Raw PCM Stream| WS_Server
 ```
 
 ---
 
-## Quick Start
+## 🚀 Quick Start Guide
 
-### 1 — Install Python dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-> **Python 3.10+ required.** TensorFlow is needed only for enrollment and training; it is not required to run the server.
-
-### 2 — Start the ASR server
+### 1. Train the ML Model (PC)
+Train the keyword spotting model and export it to a C-header file for the ESP32.
 
 ```bash
-uvicorn server.receiver.main:app --host 0.0.0.0 --port 8765
+# Install dependencies
+pip install -r ml/requirements.txt
+
+# Train the model and quantize to INT8
+python ml/train_kws.py
+
+# Export the model to firmware/ps26172_firmware/model_data.h
+python ml/export_tflite.py
 ```
 
-The server loads `faster-whisper base.en` on startup (downloads ~150 MB on first run).
-
-### 3 — Run the firmware simulator
-
-No ESP32 hardware required — the simulator runs the full firmware loop on your PC:
+### 2. Start the ASR Server (PC)
+Start the WebSocket server to receive audio streams from the ESP32 and transcribe them.
 
 ```bash
-# Simulate with a WAV file
-python firmware/esp32/main/simulator.py --audio examples/demo/demo.wav
+# Install dependencies
+pip install -r server/requirements.txt
 
-# Simulate with 3 s of noise (no audio file)
-python firmware/esp32/main/simulator.py
+# Run the server
+python server/main.py
 ```
+> **Note:** Take note of your PC's local IP address (e.g., `192.168.x.x`). You will need it for the Arduino sketch.
 
-### 4 — Enroll a custom wake word (optional)
+### 3. Flash the ESP32-S3 Firmware
+We use the **Arduino IDE** for simple and accessible flashing.
 
-```bash
-# Record 5+ utterances of your wake word as WAV files, then:
-python -m ml.personalization.enrollment \
-    utt1.wav utt2.wav utt3.wav utt4.wav utt5.wav \
-    --name my_keyword \
-    --model ml/models/int8/model.tflite
-```
-
-The prototype is saved to `ml/personalization/profiles/my_keyword.npy`.
+1. Install the **WebSockets** library by Markus Sattler via the Arduino Library Manager.
+2. Open `firmware/ps26172_firmware/ps26172_firmware.ino` in the Arduino IDE.
+3. Update the Wi-Fi credentials and the WebSocket server IP at the top of the file:
+   ```cpp
+   const char* ssid = "YOUR_WIFI_SSID";
+   const char* password = "YOUR_WIFI_PASSWORD";
+   const char* websocket_server = "192.168.31.74"; // <--- Update this
+   ```
+4. Select your **ESP32-S3** board, ensure **PSRAM is Enabled**, and click **Upload**.
 
 ---
 
-## Repository Layout
+## 🔌 Hardware Wiring
 
-```
-ps26172-edge-kws/
-├── firmware/esp32/         ESP32-S3 firmware (C++ stubs + Python simulator)
-├── hardware/               Wiring diagram, GPIO table, BOM, power budget
-├── ml/                     DS-CNN training, MFCC preprocessing, enrollment, evaluation
-├── server/                 FastAPI WebSocket server (ASR + intent)
-├── protocol/               Binary packet spec, JSON message types, error codes
-├── tests/                  68-test suite (unit, integration, security, network)
-├── scripts/                Dataset, training, conversion, flashing utilities
-├── examples/               Usage examples and demo scripts
-├── docs/                   Requirements, security design, testing plan
-├── INFRASTRUCTURE.md       Full architecture + module reference (start here)
-├── requirements.txt        All Python dependencies
-└── pytest.ini              Test configuration
-```
+| INMP441 Microphone | ESP32-S3 Pin | Description |
+| :---: | :---: | :--- |
+| **VDD** | `3V3` | Power supply |
+| **GND** | `GND` | Ground |
+| **L/R** | `GND` | Left Channel selection |
+| **SD** | `GPIO 4` | I2S Data |
+| **WS** | `GPIO 5` | I2S Word Select |
+| **SCK**| `GPIO 6` | I2S Bit Clock |
 
-> **Detailed documentation:** See [INFRASTRUCTURE.md](INFRASTRUCTURE.md) for the complete module reference, data-flow diagrams, protocol specification, and environment configuration.
+> [!TIP]
+> Keep the I2S signal wires short (<10 cm) to prevent clock jitter and signal degradation.
 
 ---
 
-## Running Tests
-
-```bash
-# All software tests (no hardware or model artifacts required)
-python -m pytest tests/ -v -m "not hardware and not model"
-
-# With coverage report
-python -m pytest tests/ --cov=ml --cov=server --cov-report=term-missing \
-    -m "not hardware and not model"
-```
-
-Current status: **68/68 passed**.
-
-| Category | Tests |
-|---|---|
-| Unit — audio preprocessing | 16 |
-| Unit — MFCC feature extraction | 12 |
-| Unit — cosine matcher + debounce | 13 |
-| Integration — enrollment → EER pipeline | 4 |
-| Network — assembler + gap detector | 14 |
-| Security — HMAC token auth | 9 |
-
----
-
-## Server Configuration
-
-All options are read from environment variables:
-
-| Variable | Default | Description |
-|---|---|---|
-| `KWS_SECRET` | `dev-secret-do-not-use-in-production` | HMAC shared secret — **change in production** |
-| `KWS_ASR_MODEL` | `base.en` | faster-whisper model (`tiny`, `base`, `small`, `medium`) |
-| `KWS_ASR_DEVICE` | `cpu` | `cpu` or `cuda` |
-| `KWS_MAX_SESSIONS` | `10` | Max concurrent WebSocket sessions |
-| `KWS_AUTH_WINDOW_S` | `30` | Token timestamp validity window (seconds) |
-
-```bash
-# Production example
-export KWS_SECRET="$(openssl rand -hex 32)"
-export KWS_ASR_MODEL="small.en"
-export KWS_ASR_DEVICE="cuda"
-uvicorn server.receiver.main:app --host 0.0.0.0 --port 8765 --workers 1
-```
-
----
-
-## Hardware
-
-**Target:** ESP32-S3-DevKitC-1 + INMP441 MEMS I2S microphone
-
-| Signal | GPIO |
-|---|---|
-| I2S Data (SD) | GPIO 4 |
-| Word Select (WS) | GPIO 5 |
-| Bit Clock (SCK) | GPIO 6 |
-
-Flash the firmware:
-
-```bash
-idf.py -p COM3 flash monitor          # Windows
-idf.py -p /dev/ttyACM0 flash monitor  # Linux / macOS
-```
-
-See [hardware/README.md](hardware/README.md) for full wiring, power budget, and BOM.
-
----
-
-## ML Pipeline Overview
-
-```
-WAV file → load_audio → resample (16 kHz) → normalize → trim/pad (1 s)
-         → MFCC (49 × 40 × 1) → DS-CNN TFLite INT8 → 64-D embedding
-         → cosine similarity → 2-of-3 debounce → WAKE
-```
-
-Training, quantization, and evaluation scripts live in `ml/`. See [INFRASTRUCTURE.md §5](INFRASTRUCTURE.md) for the full pipeline reference.
-
----
-
-## License
-
-See [LICENSE](LICENSE).
+## ⚖️ License
+This project is open-source and available under the MIT License.

@@ -1,10 +1,4 @@
-# Server runtime dependencies
-fastapi>=0.110.0
-uvicorn[standard]>=0.29.0
-websockets>=12.0
-faster-whisper>=1.0.0
-numpy>=1.24,<2.0
-librosa>=0.10.0
-soundfile>=0.12.1
-pyttsx3>=2.90;platform_system=="Windows"
-pyttsx3>=2.90;platform_system=="Linux"
+fastapi
+uvicorn
+websockets
+faster-whisper
